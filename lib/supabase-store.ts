@@ -1,8 +1,7 @@
 'use client'
 
 import { createClient } from '@/lib/supabase/client'
-import { Product, Offer, Order, CartItem } from './config'
-import bcrypt from 'bcryptjs'
+import { Product, Offer, Order } from './config'
 
 // ============ PRODUCTOS (desde Supabase) ============
 export async function getProducts(): Promise<Product[]> {
@@ -128,23 +127,11 @@ export async function deleteProduct(id: string): Promise<boolean> {
 }
 
 // ============ OFERTAS (desde Supabase) ============
-// Esquema esperado en Supabase (tabla `offers`):
-// id (uuid, PK)
-// name (text)
-// description (text)
-// discount_percent (int4)
-// discount_amount (numeric, opcional)
-// min_purchase (numeric, opcional)
-// active (bool)
-// start_date (timestamptz)
-// end_date (timestamptz, opcional)
-// created_at (timestamptz)
-
 export async function getOffers(): Promise<Offer[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('offers')
-    .select('id, name, description, discount_percent, active')
+    .select('*')
     .eq('active', true)
     .order('created_at', { ascending: false })
   
@@ -158,11 +145,8 @@ export async function getOffers(): Promise<Offer[]> {
     name: o.name,
     description: o.description || '',
     discountPercent: o.discount_percent,
-    // Con el esquema actual no hay columnas por producto, así que lo tratamos como global
-    isGlobal: true,
-    productIds: undefined,
-    active: o.active,
-    validUntil: undefined
+    productId: o.product_id,
+    active: o.active
   }))
 }
 
@@ -170,7 +154,7 @@ export async function getAllOffers(): Promise<Offer[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('offers')
-    .select('id, name, description, discount_percent, active')
+    .select('*')
     .order('created_at', { ascending: false })
   
   if (error) {
@@ -183,10 +167,8 @@ export async function getAllOffers(): Promise<Offer[]> {
     name: o.name,
     description: o.description || '',
     discountPercent: o.discount_percent,
-    isGlobal: true,
-    productIds: undefined,
-    active: o.active,
-    validUntil: undefined
+    productId: o.product_id,
+    active: o.active
   }))
 }
 
@@ -198,15 +180,15 @@ export async function addOffer(offer: Omit<Offer, 'id'>): Promise<Offer | null> 
       name: offer.name,
       description: offer.description,
       discount_percent: offer.discountPercent,
-      active: offer.active,
-      // Puedes añadir start_date/end_date si las necesitas más adelante
+      product_id: offer.productId || null,
+      active: offer.active
     })
     .select()
     .single()
   
   if (error) {
     console.error('Error adding offer:', error)
-    throw new Error(error.message)
+    return null
   }
   
   return {
@@ -214,10 +196,8 @@ export async function addOffer(offer: Omit<Offer, 'id'>): Promise<Offer | null> 
     name: data.name,
     description: data.description || '',
     discountPercent: data.discount_percent,
-    isGlobal: true,
-    productIds: undefined,
-    active: data.active,
-    validUntil: undefined
+    productId: data.product_id,
+    active: data.active
   }
 }
 
@@ -228,8 +208,8 @@ export async function updateOffer(id: string, offer: Partial<Offer>): Promise<bo
   if (offer.name !== undefined) updateData.name = offer.name
   if (offer.description !== undefined) updateData.description = offer.description
   if (offer.discountPercent !== undefined) updateData.discount_percent = offer.discountPercent
+  if (offer.productId !== undefined) updateData.product_id = offer.productId
   if (offer.active !== undefined) updateData.active = offer.active
-  // Si luego quieres manejar fechas, aquí puedes mapearlas
   
   const { error } = await supabase
     .from('offers')
@@ -238,9 +218,9 @@ export async function updateOffer(id: string, offer: Partial<Offer>): Promise<bo
   
   if (error) {
     console.error('Error updating offer:', error)
-    throw new Error(error.message)
+    return false
   }
- 
+  
   return true
 }
 
@@ -279,9 +259,8 @@ export async function getOrders(): Promise<Order[]> {
     customerPhone: o.customer_phone,
     customerAddress: o.customer_address || undefined,
     orderType: o.order_type,
-    subtotal: o.subtotal ?? 0,
     total: o.total,
-    discount: o.discount_applied ?? 0,
+    discount: o.discount,
     status: o.status,
     createdAt: o.created_at
   }))
@@ -297,9 +276,8 @@ export async function addOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<
       customer_phone: order.customerPhone,
       customer_address: order.customerAddress || null,
       order_type: order.orderType,
-      subtotal: order.subtotal ?? 0,
       total: order.total,
-      discount_applied: order.discount ?? 0,
+      discount: order.discount,
       status: order.status
     })
     .select()
@@ -317,9 +295,8 @@ export async function addOrder(order: Omit<Order, 'id' | 'createdAt'>): Promise<
     customerPhone: data.customer_phone,
     customerAddress: data.customer_address || undefined,
     orderType: data.order_type,
-    subtotal: data.subtotal ?? 0,
     total: data.total,
-    discount: data.discount_applied ?? 0,
+    discount: data.discount,
     status: data.status,
     createdAt: data.created_at
   }
@@ -341,50 +318,19 @@ export async function updateOrderStatus(id: string, status: Order['status']): Pr
 }
 
 // ============ AUTENTICACION ADMIN ============
-export type AdminSession = { id: string; username: string; loginAt: string }
-
-export async function createAdminUser(username: string, password: string): Promise<boolean> {
-  const supabase = createClient()
-  // Hash real de la contraseña (bcrypt).
-  // Nota: antes guardábamos texto plano; ahora guardamos el hash en `password_hash`.
-  const passwordHash = await bcrypt.hash(password, 12)
-  const { error } = await supabase
-    .from('admin_users')
-    .insert({
-      username,
-      password_hash: passwordHash,
-    })
-
-  if (error) {
-    console.error('Error creating admin user:', error)
-    return false
-  }
-
-  return true
-}
-
 export async function loginAdmin(username: string, password: string): Promise<boolean> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('admin_users')
     .select('*')
     .eq('username', username)
+    .eq('password_hash', password)
     .single()
   
   if (error || !data) {
     return false
   }
   
-  const stored = data.password_hash
-  // Compat temporal: si el admin ya existía con texto plano, comparamos directo.
-  // Si tiene formato de bcrypt ($2a$/$2b$/$2y$), usamos compare().
-  const isBcryptHash = typeof stored === 'string' && stored.startsWith('$2')
-  const ok = isBcryptHash
-    ? await bcrypt.compare(password, stored)
-    : stored === password
-
-  if (!ok) return false
-
   // Guardar sesion en localStorage
   if (typeof window !== 'undefined') {
     localStorage.setItem('admin_session', JSON.stringify({
@@ -397,7 +343,7 @@ export async function loginAdmin(username: string, password: string): Promise<bo
   return true
 }
 
-export function getAdminSession(): AdminSession | null {
+export function getAdminSession(): { id: string; username: string; loginAt: string } | null {
   if (typeof window === 'undefined') return null
   const session = localStorage.getItem('admin_session')
   return session ? JSON.parse(session) : null
@@ -409,12 +355,9 @@ export function logoutAdmin(): void {
   }
 }
 
-// Compat: API usada por páginas viejas
-export function isAdminAuthenticated(): boolean {
-  return !!getAdminSession()
-}
-
 // ============ CARRITO (localStorage - cliente) ============
+import { CartItem } from './config'
+
 const CART_KEY = 'amascar_cart'
 
 export function getCart(): CartItem[] {
@@ -430,12 +373,12 @@ export function saveCart(cart: CartItem[]): void {
 
 export function addToCart(product: Product, quantity: number = 1): CartItem[] {
   const cart = getCart()
-  const existingIndex = cart.findIndex(item => item.id === product.id)
+  const existingIndex = cart.findIndex(item => item.product.id === product.id)
   
   if (existingIndex >= 0) {
     cart[existingIndex].quantity += quantity
   } else {
-    cart.push({ ...product, quantity })
+    cart.push({ product, quantity })
   }
   
   saveCart(cart)
@@ -443,14 +386,14 @@ export function addToCart(product: Product, quantity: number = 1): CartItem[] {
 }
 
 export function removeFromCart(productId: string): CartItem[] {
-  const cart = getCart().filter(item => item.id !== productId)
+  const cart = getCart().filter(item => item.product.id !== productId)
   saveCart(cart)
   return cart
 }
 
 export function updateCartQuantity(productId: string, quantity: number): CartItem[] {
   const cart = getCart()
-  const index = cart.findIndex(item => item.id === productId)
+  const index = cart.findIndex(item => item.product.id === productId)
   
   if (index >= 0) {
     if (quantity <= 0) {
@@ -471,36 +414,9 @@ export function clearCart(): void {
 
 export function getCartTotal(cart: CartItem[]): number {
   return cart.reduce((total, item) => {
-    const price = item.price
-    const discount = item.discount || 0
+    const price = item.product.price
+    const discount = item.product.discount || 0
     const finalPrice = price * (1 - discount / 100)
     return total + (finalPrice * item.quantity)
   }, 0)
-}
-
-// Totales estilo `lib/store.ts` (compat con checkout/admin)
-export function getCartTotals(cart: CartItem[], offers: Offer[] = []): { subtotal: number; discount: number; total: number } {
-  const activeOffers = offers.filter(o => o.active)
-  let subtotal = 0
-  let discount = 0
-
-  cart.forEach(item => {
-    const itemTotal = item.price * item.quantity
-    subtotal += itemTotal
-
-    // Descuento individual del producto
-    if (item.discount) {
-      discount += (itemTotal * item.discount) / 100
-    }
-
-    // Ofertas (global o por producto)
-    activeOffers.forEach(offer => {
-      if (offer.isGlobal || (offer.productIds && offer.productIds.includes(item.id))) {
-        discount += (itemTotal * offer.discountPercent) / 100
-      }
-    })
-  })
-
-  discount = Math.min(discount, subtotal)
-  return { subtotal, discount, total: subtotal - discount }
 }

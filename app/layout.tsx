@@ -45,15 +45,15 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: '/icono.png',
+        url: '/icon-light-32x32.png',
         media: '(prefers-color-scheme: light)',
       },
       {
-        url: '/icono.png',
+        url: '/icon-dark-32x32.png',
         media: '(prefers-color-scheme: dark)',
       },
     ],
-    apple: '/icono.png',
+    apple: '/apple-icon.png',
   },
 }
 

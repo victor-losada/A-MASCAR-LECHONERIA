@@ -20,15 +20,15 @@ export const WHATSAPP_NUMBER_2 = "573133090994" // Segundo WhatsApp
 // ============ UBICACIÓN ============
 // Cambia este link por la ubicación real de tu negocio en Google Maps
 // Para obtenerlo: Abre Google Maps > Busca tu negocio > Clic en "Compartir" > Copia el link
-export const GOOGLE_MAPS_LINK = "https://maps.app.goo.gl/GiB2QKAhyEEYtPgcA"
+export const GOOGLE_MAPS_LINK = "https://www.google.com/maps/search/?api=1&query=Lechoneria+Bogota+Colombia"
 
 // Dirección para mostrar
-export const BUSINESS_ADDRESS = "Pitalito, Huila"
+export const BUSINESS_ADDRESS = "Bogotá, Colombia"
 
 // ============ CREDENCIALES DEL ADMINISTRADOR ============
 // ¡IMPORTANTE! Cambia la contraseña después de la primera vez
-export const ADMIN_USERNAME = "victor"
-export const ADMIN_PASSWORD = "victor123" // Cambia esta contraseña
+export const ADMIN_USERNAME = "admin"
+export const ADMIN_PASSWORD = "lechona2026" // Cambia esta contraseña
 
 // ============ CATEGORÍAS DE PRODUCTOS ============
 export const PRODUCT_CATEGORIES = [

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Product, PRODUCT_CATEGORIES, ProductCategory } from '@/lib/config'
-import { getProducts as getSupabaseProducts } from '@/lib/supabase-store'
+import { getProducts } from '@/lib/store'
 import { ProductCard } from './product-card'
 import { Package, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -17,16 +17,18 @@ export function CatalogSection({ onCartUpdate }: CatalogSectionProps) {
   const [searchTerm, setSearchTerm] = useState('')
   
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      const allProducts = (await getSupabaseProducts()).filter(p => p.available)
-      if (!mounted) return
+    const loadProducts = () => {
+      const allProducts = getProducts().filter(p => p.available)
       setProducts(allProducts)
-    })()
-
-    return () => {
-      mounted = false
     }
+    
+    loadProducts()
+    
+    // Escuchar cambios en localStorage
+    const handleStorageChange = () => loadProducts()
+    window.addEventListener('storage', handleStorageChange)
+    
+    return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
   
   const filteredProducts = products.filter(product => {

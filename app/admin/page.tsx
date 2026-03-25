@@ -2,14 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { BUSINESS_NAME } from '@/lib/config'
-import { isAdminAuthenticated, loginAdmin } from '@/lib/supabase-store'
+import { ADMIN_USERNAME, ADMIN_PASSWORD, BUSINESS_NAME } from '@/lib/config'
+import { isAdminAuthenticated, setAdminAuthenticated } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { Lock, User, LogIn } from 'lucide-react'
-import Link from 'next/link'
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -27,18 +26,21 @@ export default function AdminLoginPage() {
     }
   }, [router])
   
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     
-    const ok = await loginAdmin(username, password)
-    if (ok) {
-      toast.success('¡Bienvenido, administrador!')
-      router.push('/admin/dashboard')
-    } else {
-      toast.error('Credenciales incorrectas')
-      setIsLoading(false)
-    }
+    // Simular delay para mejor UX
+    setTimeout(() => {
+      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        setAdminAuthenticated(true)
+        toast.success('¡Bienvenido, administrador!')
+        router.push('/admin/dashboard')
+      } else {
+        toast.error('Credenciales incorrectas')
+        setIsLoading(false)
+      }
+    }, 500)
   }
   
   if (checkingAuth) {
@@ -50,7 +52,7 @@ export default function AdminLoginPage() {
   }
   
   return (
-    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-background to-muted p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
       <div className="w-full max-w-md">
         <div className="bg-card rounded-2xl border border-border shadow-xl p-8">
           {/* Logo */}
@@ -121,12 +123,12 @@ export default function AdminLoginPage() {
           
           {/* Link para volver */}
           <div className="text-center mt-6">
-            <Link
-              href="/"
+            <a 
+              href="/" 
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               ← Volver a la tienda
-            </Link>
+            </a>
           </div>
         </div>
         

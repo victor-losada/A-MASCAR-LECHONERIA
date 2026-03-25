@@ -2,23 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { Offer } from '@/lib/config'
-import { getOffers } from '@/lib/supabase-store'
+import { getOffers } from '@/lib/store'
 import { Tag, Sparkles, Percent } from 'lucide-react'
 
 export function OffersSection() {
   const [offers, setOffers] = useState<Offer[]>([])
   
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      const activeOffers = (await getOffers()).filter(o => o.active)
-      if (!mounted) return
-      setOffers(activeOffers)
-    })()
-
-    return () => {
-      mounted = false
-    }
+    const activeOffers = getOffers().filter(o => o.active)
+    setOffers(activeOffers)
   }, [])
   
   if (offers.length === 0) {

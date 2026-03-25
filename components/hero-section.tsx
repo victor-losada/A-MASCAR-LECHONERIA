@@ -15,26 +15,20 @@ export function HeroSection() {
   
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-b from-background via-background to-muted/30 pt-16">
-      {/* Partículas de fondo (valores fijos por índice para evitar hydration mismatch) */}
+      {/* Partículas de fondo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(20)].map((_, i) => {
-          const left = ((i * 17 + 7) % 100)
-          const top = ((i * 23 + 11) % 100)
-          const delay = (i * 0.25) % 5
-          const duration = 3 + (i % 3) * 0.5
-          return (
-            <div
-              key={i}
-              className="absolute w-2 h-2 bg-primary/20 rounded-full animate-particle"
-              style={{
-                left: `${left}%`,
-                top: `${top}%`,
-                animationDelay: `${delay}s`,
-                animationDuration: `${duration}s`
-              }}
-            />
-          )
-        })}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-2 h-2 bg-primary/20 rounded-full animate-particle"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${3 + Math.random() * 2}s`
+            }}
+          />
+        ))}
       </div>
       
       {/* Decoración de fondo */}
@@ -118,7 +112,7 @@ export function HeroSection() {
               {/* Main image container */}
               <div className="relative w-[280px] h-[280px] md:w-[380px] md:h-[380px] rounded-full overflow-hidden border-4 border-primary/30 shadow-2xl transform hover:scale-105 transition-transform duration-500">
                 <Image
-                  src="/images/lechona2.png"
+                  src="/images/lechona-hero.jpg"
                   alt="Lechona asada tradicional colombiana"
                   fill
                   className="object-cover"

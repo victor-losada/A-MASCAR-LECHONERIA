@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { CartItem, formatPrice, BUSINESS_NAME, generateWhatsAppLink } from '@/lib/config'
-import { getCart, clearCart, getOffers, getCartTotals } from '@/lib/supabase-store'
+import { getCart, getCartTotal, clearCart, addOrder, generateId } from '@/lib/store'
 import { Navbar } from '@/components/navbar'
 import { Footer } from '@/components/footer'
 import { Button } from '@/components/ui/button'
@@ -37,20 +37,8 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      const currentCart = getCart()
-      if (!mounted) return
-      setCart(currentCart)
-
-      const offers = await getOffers()
-      if (!mounted) return
-      setTotals(getCartTotals(currentCart, offers))
-    })()
-
-    return () => {
-      mounted = false
-    }
+    setCart(getCart())
+    setTotals(getCartTotal())
   }, [])
   
   const isFormValid = () => {
@@ -90,37 +78,30 @@ export default function CheckoutPage() {
     return message
   }
   
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!isFormValid()) {
       toast.error('Por favor completa todos los campos requeridos')
       return
     }
     
     setIsSubmitting(true)
-
-    const res = await fetch('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        items: cart,
-        customerName: name,
-        customerPhone: phone,
-        customerAddress: orderType === 'delivery' ? address : undefined,
-        orderType: orderType as OrderType,
-        subtotal: totals.subtotal,
-        total: totals.total,
-        discount: totals.discount,
-        status: 'pending',
-      }),
-    })
-    const created = res.ok ? await res.json() : null
-
-    if (!created || !created.id) {
-      const err = await res.json().catch(() => ({}))
-      toast.error(err.error || 'No pudimos registrar el pedido. Intenta de nuevo.')
-      setIsSubmitting(false)
-      return
+    
+    // Guardar el pedido localmente
+    const order = {
+      id: generateId(),
+      items: cart,
+      customerName: name,
+      customerPhone: phone,
+      customerAddress: orderType === 'delivery' ? address : undefined,
+      orderType: orderType as OrderType,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      total: totals.total,
+      status: 'pending' as const,
+      createdAt: new Date().toISOString()
     }
+    
+    addOrder(order)
     
     // Generar link de WhatsApp
     const message = generateWhatsAppMessage()
@@ -302,7 +283,7 @@ export default function CheckoutPage() {
               <div className="space-y-4 mb-6">
                 {cart.map((item) => (
                   <div key={item.id} className="flex gap-3">
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-muted shrink-0">
+                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                       {item.imageUrl ? (
                         <Image
                           src={item.imageUrl}

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { CartItem, formatPrice } from '@/lib/config'
-import { getCart, updateCartQuantity, removeFromCart, getOffers, getCartTotals } from '@/lib/supabase-store'
-import { ShoppingCart, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react'
+import { getCart, updateCartItemQuantity, removeFromCart, getCartTotal, clearCart } from '@/lib/store'
+import { ShoppingCart, X, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -19,11 +19,9 @@ export function CartSidebar({ cartUpdateTrigger }: CartSidebarProps) {
   const [totals, setTotals] = useState({ subtotal: 0, discount: 0, total: 0 })
   const [isOpen, setIsOpen] = useState(false)
   
-  const loadCart = async () => {
-    const currentCart = getCart()
-    setCart(currentCart)
-    const offers = await getOffers()
-    setTotals(getCartTotals(currentCart, offers))
+  const loadCart = () => {
+    setCart(getCart())
+    setTotals(getCartTotal())
   }
   
   useEffect(() => {
@@ -39,14 +37,14 @@ export function CartSidebar({ cartUpdateTrigger }: CartSidebarProps) {
   const handleQuantityChange = (productId: string, delta: number) => {
     const item = cart.find(i => i.id === productId)
     if (item) {
-      updateCartQuantity(productId, item.quantity + delta)
-      void loadCart()
+      updateCartItemQuantity(productId, item.quantity + delta)
+      loadCart()
     }
   }
   
   const handleRemove = (productId: string) => {
     removeFromCart(productId)
-    void loadCart()
+    loadCart()
   }
   
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
@@ -87,7 +85,7 @@ export function CartSidebar({ cartUpdateTrigger }: CartSidebarProps) {
                   {cart.map((item) => (
                     <div key={item.id} className="flex gap-3 p-3 bg-muted/50 rounded-lg">
                       {/* Imagen */}
-                      <div className="relative w-16 h-16 rounded-md overflow-hidden bg-muted shrink-0">
+                      <div className="relative w-16 h-16 rounded-md overflow-hidden bg-muted flex-shrink-0">
                         {item.imageUrl ? (
                           <Image
                             src={item.imageUrl}

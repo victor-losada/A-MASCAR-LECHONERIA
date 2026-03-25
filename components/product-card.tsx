@@ -1,7 +1,7 @@
 'use client'
 
 import { Product, formatPrice } from '@/lib/config'
-import { addToCart } from '@/lib/supabase-store'
+import { addToCart } from '@/lib/store'
 import { ShoppingCart, Percent } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'

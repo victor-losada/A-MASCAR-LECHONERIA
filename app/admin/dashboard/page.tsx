@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, ChangeEvent } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { 
   Product, 
@@ -12,16 +12,21 @@ import {
   BUSINESS_NAME
 } from '@/lib/config'
 import { 
-  isAdminAuthenticated,
-  logoutAdmin,
-  getAllProducts,
-  getAllOffers,
+  getProducts, 
+  saveProducts,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  getOffers,
   addOffer,
   updateOffer,
   deleteOffer,
   getOrders,
-  updateOrderStatus
-} from '@/lib/supabase-store'
+  updateOrderStatus,
+  isAdminAuthenticated,
+  setAdminAuthenticated,
+  generateId
+} from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,7 +65,6 @@ export default function AdminDashboardPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
   const [orders, setOrders] = useState<Order[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   
   // Estado para formularios
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -78,8 +82,6 @@ export default function AdminDashboardPage() {
     available: true,
     discount: ''
   })
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
   
   // Formulario de oferta
   const [offerForm, setOfferForm] = useState({
@@ -90,19 +92,6 @@ export default function AdminDashboardPage() {
     active: true,
     validUntil: ''
   })
-
-  async function loadData() {
-    setIsLoading(true)
-    const [p, o, ord] = await Promise.all([
-      getAllProducts(),
-      getAllOffers(),
-      getOrders()
-    ])
-    setProducts(p)
-    setOffers(o)
-    setOrders(ord)
-    setIsLoading(false)
-  }
   
   useEffect(() => {
     // Verificar autenticación
@@ -114,8 +103,14 @@ export default function AdminDashboardPage() {
     loadData()
   }, [router])
   
+  const loadData = () => {
+    setProducts(getProducts())
+    setOffers(getOffers())
+    setOrders(getOrders())
+  }
+  
   const handleLogout = () => {
-    logoutAdmin()
+    setAdminAuthenticated(false)
     router.push('/admin')
   }
   
@@ -130,8 +125,6 @@ export default function AdminDashboardPage() {
       available: true,
       discount: ''
     })
-    setImageFile(null)
-    setImagePreview(null)
     setEditingProduct(null)
     setShowProductForm(false)
   }
@@ -146,124 +139,44 @@ export default function AdminDashboardPage() {
       available: product.available,
       discount: product.discount?.toString() || ''
     })
-    setImageFile(null)
-    setImagePreview(product.imageUrl || null)
     setEditingProduct(product)
     setShowProductForm(true)
   }
   
-  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) {
-      setImageFile(null)
-      setImagePreview(null)
-      return
-    }
-    if (!file.type.startsWith('image/')) {
-      toast.error('El archivo debe ser una imagen')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('La imagen debe pesar menos de 5MB')
-      return
-    }
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
-  }
-
-  const handleSaveProduct = async () => {
+  const handleSaveProduct = () => {
     if (!productForm.name || !productForm.price) {
       toast.error('Nombre y precio son obligatorios')
       return
     }
     
-    let imageUrl = productForm.imageUrl
-
-    // Si el usuario seleccionó un archivo, lo subimos vía API (servidor con service role, evita RLS de Storage)
-    if (imageFile) {
-      try {
-        const formData = new FormData()
-        formData.append('file', imageFile)
-        const uploadRes = await fetch('/api/admin/upload-product-image', {
-          method: 'POST',
-          body: formData,
-        })
-        const uploadData = await uploadRes.json().catch(() => ({}))
-        if (!uploadRes.ok || !uploadData.url) {
-          toast.error(uploadData.error || 'No se pudo subir la imagen')
-          return
-        }
-        imageUrl = uploadData.url
-      } catch (err) {
-        console.error(err)
-        toast.error('Error inesperado al subir la imagen')
-        return
-      }
-    }
-
-    const productData = {
+    const productData: Product = {
+      id: editingProduct?.id || generateId(),
       name: productForm.name,
       description: productForm.description,
       price: parseFloat(productForm.price),
       category: productForm.category,
-      imageUrl,
+      imageUrl: productForm.imageUrl,
       available: productForm.available,
       discount: productForm.discount ? parseFloat(productForm.discount) : undefined
     }
     
-    try {
-      if (editingProduct) {
-        const res = await fetch(`/api/admin/products/${editingProduct.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: productData.name,
-            description: productData.description,
-            price: productData.price,
-            category: productData.category,
-            imageUrl: productData.imageUrl,
-            available: productData.available,
-            discount: productData.discount
-          })
-        })
-        const data = await res.json().catch(() => ({}))
-        if (res.ok) toast.success('Producto actualizado')
-        else toast.error(data.error || 'No se pudo actualizar el producto')
-      } else {
-        const res = await fetch('/api/admin/products', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: productData.name,
-            description: productData.description,
-            price: productData.price,
-            category: productData.category,
-            imageUrl: productData.imageUrl,
-            available: productData.available,
-            discount: productData.discount
-          })
-        })
-        const data = await res.json().catch(() => ({}))
-        if (res.ok && data.id) toast.success('Producto agregado')
-        else toast.error(data.error || 'No se pudo agregar el producto')
-      }
-    } catch (err) {
-      console.error(err)
-      toast.error('Error al guardar el producto')
-      return
+    if (editingProduct) {
+      updateProduct(productData)
+      toast.success('Producto actualizado')
+    } else {
+      addProduct(productData)
+      toast.success('Producto agregado')
     }
     
-    await loadData()
+    loadData()
     resetProductForm()
   }
   
-  const handleDeleteProduct = async (productId: string) => {
+  const handleDeleteProduct = (productId: string) => {
     if (confirm('¿Estás seguro de eliminar este producto?')) {
-      const res = await fetch(`/api/admin/products/${productId}`, { method: 'DELETE' })
-      const data = await res.json().catch(() => ({}))
-      await loadData()
-      if (res.ok) toast.success('Producto eliminado')
-      else toast.error(data.error || 'No se pudo eliminar el producto')
+      deleteProduct(productId)
+      loadData()
+      toast.success('Producto eliminado')
     }
   }
   
@@ -294,13 +207,14 @@ export default function AdminDashboardPage() {
     setShowOfferForm(true)
   }
   
-  const handleSaveOffer = async () => {
+  const handleSaveOffer = () => {
     if (!offerForm.name || !offerForm.discountPercent) {
       toast.error('Nombre y porcentaje son obligatorios')
       return
     }
     
-    const offerData = {
+    const offerData: Offer = {
+      id: editingOffer?.id || generateId(),
       name: offerForm.name,
       description: offerForm.description,
       discountPercent: parseFloat(offerForm.discountPercent),
@@ -309,53 +223,31 @@ export default function AdminDashboardPage() {
       validUntil: offerForm.validUntil || undefined
     }
     
-    try {
-      if (editingOffer) {
-        const ok = await updateOffer(editingOffer.id, {
-          name: offerData.name,
-          description: offerData.description,
-          discountPercent: offerData.discountPercent,
-          isGlobal: offerData.isGlobal,
-          active: offerData.active,
-          validUntil: offerData.validUntil
-        })
-        if (ok) toast.success('Oferta actualizada')
-      } else {
-        await addOffer({
-          name: offerData.name,
-          description: offerData.description,
-          discountPercent: offerData.discountPercent,
-          isGlobal: offerData.isGlobal,
-          active: offerData.active,
-          validUntil: offerData.validUntil
-        })
-        toast.success('Oferta creada')
-      }
-    } catch (err: any) {
-      console.error(err)
-      toast.error(err?.message || 'No se pudo guardar la oferta')
-      return
+    if (editingOffer) {
+      updateOffer(offerData)
+      toast.success('Oferta actualizada')
+    } else {
+      addOffer(offerData)
+      toast.success('Oferta creada')
     }
     
-    await loadData()
+    loadData()
     resetOfferForm()
   }
   
-  const handleDeleteOffer = async (offerId: string) => {
+  const handleDeleteOffer = (offerId: string) => {
     if (confirm('¿Estás seguro de eliminar esta oferta?')) {
-      const ok = await deleteOffer(offerId)
-      await loadData()
-      if (ok) toast.success('Oferta eliminada')
-      else toast.error('No se pudo eliminar la oferta')
+      deleteOffer(offerId)
+      loadData()
+      toast.success('Oferta eliminada')
     }
   }
   
   // ============ PEDIDOS ============
-  const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
-    const ok = await updateOrderStatus(orderId, status)
-    await loadData()
-    if (ok) toast.success('Estado del pedido actualizado')
-    else toast.error('No se pudo actualizar el estado del pedido')
+  const handleUpdateOrderStatus = (orderId: string, status: Order['status']) => {
+    updateOrderStatus(orderId, status)
+    loadData()
+    toast.success('Estado del pedido actualizado')
   }
   
   const getStatusBadge = (status: Order['status']) => {
@@ -415,9 +307,6 @@ export default function AdminDashboardPage() {
       
       {/* Contenido */}
       <main className="max-w-7xl mx-auto px-4 py-8">
-        {isLoading && (
-          <div className="text-muted-foreground mb-6">Cargando datos…</div>
-        )}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="products" className="gap-2">
@@ -526,30 +415,13 @@ export default function AdminDashboardPage() {
                   <div className="space-y-2 md:col-span-2">
                     <Label className="flex items-center gap-2">
                       <ImageIcon className="w-4 h-4" />
-                      Imagen del producto
+                      URL de imagen
                     </Label>
-                    <div className="flex flex-col gap-2">
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Se subirá a Supabase Storage (bucket `product-images`). Máx. 5MB.
-                      </p>
-                      {(imagePreview || productForm.imageUrl) && (
-                        <div className="mt-2">
-                          <p className="text-xs text-muted-foreground mb-1">Vista previa:</p>
-                          <div className="w-24 h-24 rounded-md overflow-hidden bg-muted flex items-center justify-center">
-                            <img
-                              src={imagePreview || productForm.imageUrl}
-                              alt="Vista previa"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <Input
+                      value={productForm.imageUrl}
+                      onChange={(e) => setProductForm({...productForm, imageUrl: e.target.value})}
+                      placeholder="https://ejemplo.com/imagen.jpg"
+                    />
                   </div>
                   
                   <div className="flex items-center gap-2">
@@ -584,7 +456,7 @@ export default function AdminDashboardPage() {
               <div className="grid gap-4">
                 {products.map((product) => (
                   <div key={product.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden shrink-0">
+                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                       {product.imageUrl ? (
                         <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" />
                       ) : (
@@ -743,7 +615,7 @@ export default function AdminDashboardPage() {
               <div className="grid gap-4">
                 {offers.map((offer) => (
                   <div key={offer.id} className="bg-card rounded-xl border border-border p-4 flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <Percent className="w-6 h-6 text-primary" />
                     </div>
                     
