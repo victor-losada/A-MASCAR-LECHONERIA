@@ -1,3 +1,57 @@
+'use client'
+
+import { useState, useEffect, ChangeEvent } from 'react'
+import { useRouter } from 'next/navigation'
+import { 
+  Product, 
+  Offer, 
+  Order, 
+  PRODUCT_CATEGORIES, 
+  ProductCategory,
+  formatPrice,
+  BUSINESS_NAME
+} from '@/lib/config'
+import { 
+  isAdminAuthenticated,
+  logoutAdmin,
+  getAllProducts,
+  getAllOffers,
+  addOffer,
+  updateOffer,
+  deleteOffer,
+} from '@/lib/supabase-store'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Switch } from '@/components/ui/switch'
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { toast } from 'sonner'
+import { 
+  Package, 
+  Tag, 
+  ShoppingBag, 
+  LogOut, 
+  Plus, 
+  Pencil, 
+  Trash2,
+  Save,
+  X,
+  Image as ImageIcon,
+  DollarSign,
+  Percent,
+  Clock,
+  CheckCircle,
+  XCircle,
+  AlertCircle
+} from 'lucide-react'
+
 export default function AdminDashboardPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('products')
