@@ -1,65 +1,15 @@
-'use client'
-
-import { useState, useEffect, ChangeEvent } from 'react'
-import { useRouter } from 'next/navigation'
-import { 
-  Product, 
-  Offer, 
-  Order, 
-  PRODUCT_CATEGORIES, 
-  ProductCategory,
-  formatPrice,
-  BUSINESS_NAME
-} from '@/lib/config'
-import { 
-  isAdminAuthenticated,
-  logoutAdmin,
-  getAllProducts,
-  getAllOffers,
-  addOffer,
-  updateOffer,
-  deleteOffer,
-  getOrders,
-  updateOrderStatus
-} from '@/lib/supabase-store'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Switch } from '@/components/ui/switch'
-import { 
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { toast } from 'sonner'
-import { 
-  Package, 
-  Tag, 
-  ShoppingBag, 
-  LogOut, 
-  Plus, 
-  Pencil, 
-  Trash2,
-  Save,
-  X,
-  Image as ImageIcon,
-  DollarSign,
-  Percent,
-  Clock,
-  CheckCircle,
-  XCircle,
-  AlertCircle
-} from 'lucide-react'
-
 export default function AdminDashboardPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState('products')
   const [products, setProducts] = useState<Product[]>([])
   const [offers, setOffers] = useState<Offer[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [ordersTotal, setOrdersTotal] = useState(0)
+  const [ordersPage, setOrdersPage] = useState(1)
+  const [ordersPageSize] = useState(2)
+  const [ordersQuery, setOrdersQuery] = useState('')
+  const [ordersStatus, setOrdersStatus] = useState<'all' | Order['status']>('all')
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   
   // Estado para formularios
@@ -93,15 +43,41 @@ export default function AdminDashboardPage() {
 
   async function loadData() {
     setIsLoading(true)
-    const [p, o, ord] = await Promise.all([
+    const [p, o] = await Promise.all([
       getAllProducts(),
       getAllOffers(),
-      getOrders()
     ])
     setProducts(p)
     setOffers(o)
-    setOrders(ord)
     setIsLoading(false)
+  }
+
+  async function loadOrders(next?: { page?: number; q?: string; status?: 'all' | Order['status'] }) {
+    const page = next?.page ?? ordersPage
+    const q = next?.q ?? ordersQuery
+    const status = next?.status ?? ordersStatus
+
+    setIsOrdersLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set('page', String(page))
+      params.set('pageSize', String(ordersPageSize))
+      if (q.trim()) params.set('q', q.trim())
+      if (status !== 'all') params.set('status', status)
+      else params.set('status', 'all')
+
+      const res = await fetch(`/api/admin/orders?${params.toString()}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudieron cargar los pedidos')
+
+      setOrders(data.orders || [])
+      setOrdersTotal(Number(data.total) || 0)
+    } catch (e) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : 'No se pudieron cargar los pedidos')
+    } finally {
+      setIsOrdersLoading(false)
+    }
   }
   
   useEffect(() => {
@@ -113,6 +89,12 @@ export default function AdminDashboardPage() {
     
     loadData()
   }, [router])
+
+  useEffect(() => {
+    if (activeTab !== 'orders') return
+    loadOrders({ page: ordersPage })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, ordersPage])
   
   const handleLogout = () => {
     logoutAdmin()
@@ -351,25 +333,37 @@ export default function AdminDashboardPage() {
   }
   
   // ============ PEDIDOS ============
-  const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
-    const ok = await updateOrderStatus(orderId, status)
-    await loadData()
-    if (ok) toast.success('Estado del pedido actualizado')
-    else toast.error('No se pudo actualizar el estado del pedido')
+  const handleUpdateOrderStatus = async (orderId: string, status: 'ready' | 'cancelled') => {
+    try {
+      const res = await fetch(`/api/admin/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'No se pudo actualizar el estado')
+      toast.success('Estado del pedido actualizado')
+      await loadOrders()
+    } catch (e) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : 'No se pudo actualizar el estado del pedido')
+    }
   }
   
   const getStatusBadge = (status: Order['status']) => {
-    const styles = {
+    const styles: Record<Order['status'], string> = {
       pending: 'bg-yellow-100 text-yellow-800',
       confirmed: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
+      preparing: 'bg-yellow-100 text-yellow-800',
+      ready: 'bg-green-100 text-green-800',
+      cancelled: 'bg-red-100 text-red-800',
     }
-    const labels = {
+    const labels: Record<Order['status'], string> = {
       pending: 'Pendiente',
       confirmed: 'Confirmado',
-      completed: 'Completado',
-      cancelled: 'Cancelado'
+      preparing: 'Preparando',
+      ready: 'Listo para entregar',
+      cancelled: 'Cancelado',
     }
     return (
       <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status]}`}>
@@ -430,7 +424,7 @@ export default function AdminDashboardPage() {
             </TabsTrigger>
             <TabsTrigger value="orders" className="gap-2">
               <ShoppingBag className="w-4 h-4" />
-              Pedidos ({orders.length})
+              Pedidos ({ordersTotal})
             </TabsTrigger>
           </TabsList>
           
@@ -788,87 +782,184 @@ export default function AdminDashboardPage() {
           
           {/* TAB: PEDIDOS */}
           <TabsContent value="orders" className="space-y-6">
-            <h2 className="text-2xl font-bold text-foreground">Pedidos Recibidos</h2>
-            
-            {orders.length === 0 ? (
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Pedidos</h2>
+                <p className="text-sm text-muted-foreground">
+                  Busca por nombre o teléfono. Usa filtros y paginación para manejar alto volumen.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="w-full sm:w-72">
+                  <Label htmlFor="ordersSearch" className="text-xs text-muted-foreground">Buscar</Label>
+                  <Input
+                    id="ordersSearch"
+                    value={ordersQuery}
+                    onChange={(e) => setOrdersQuery(e.target.value)}
+                    placeholder="Nombre o teléfono…"
+                  />
+                </div>
+
+                <div className="w-full sm:w-56">
+                  <Label className="text-xs text-muted-foreground">Estado</Label>
+                  <Select
+                    value={ordersStatus}
+                    onValueChange={(v) => {
+                      const next = v as 'all' | Order['status']
+                      setOrdersStatus(next)
+                      setOrdersPage(1)
+                      loadOrders({ page: 1, status: next })
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="ready">Listo</SelectItem>
+                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  variant="outline"
+                  className="mt-2 sm:mt-6"
+                  onClick={() => {
+                    setOrdersPage(1)
+                    loadOrders({ page: 1, q: ordersQuery, status: ordersStatus })
+                  }}
+                  disabled={isOrdersLoading}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                Mostrando {orders.length} de {ordersTotal}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOrdersPage(p => Math.max(1, p - 1))}
+                  disabled={isOrdersLoading || ordersPage <= 1}
+                >
+                  Anterior
+                </Button>
+                <span>Página {ordersPage}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOrdersPage(p => p + 1)}
+                  disabled={isOrdersLoading || ordersPage * ordersPageSize >= ordersTotal}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+
+            {isOrdersLoading ? (
+              <div className="text-muted-foreground">Cargando pedidos…</div>
+            ) : orders.length === 0 ? (
               <div className="text-center py-12 bg-card rounded-xl border border-dashed border-border">
                 <ShoppingBag className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground">No hay pedidos aún</p>
                 <p className="text-sm text-muted-foreground/70">Los pedidos aparecerán aquí cuando los clientes compren</p>
               </div>
             ) : (
-              <div className="space-y-4">
-                {orders.map((order) => (
-                  <div key={order.id} className="bg-card rounded-xl border border-border p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-foreground">Pedido #{order.id.slice(-6)}</h3>
-                          {getStatusBadge(order.status)}
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="grid grid-cols-12 gap-3 px-4 py-3 border-b border-border text-xs font-medium text-muted-foreground">
+                  <div className="col-span-3">Pedido</div>
+                  <div className="col-span-3">Cliente</div>
+                  <div className="col-span-2">Tipo</div>
+                  <div className="col-span-2">Total</div>
+                  <div className="col-span-2 text-right">Acciones</div>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {orders.map((order) => (
+                    <div key={order.id} className="px-4 py-4">
+                      <div className="grid grid-cols-12 gap-3 items-start">
+                        <div className="col-span-12 md:col-span-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">#{order.id.slice(-6)}</span>
+                            {getStatusBadge(order.status)}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {new Date(order.createdAt).toLocaleString('es-CO')}
+                          </p>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(order.createdAt).toLocaleString('es-CO')}
-                        </p>
+
+                        <div className="col-span-12 md:col-span-3">
+                          <p className="text-sm font-medium text-foreground">{order.customerName}</p>
+                          <p className="text-xs text-muted-foreground">{order.customerPhone}</p>
+                          {order.customerAddress && (
+                            <p className="text-xs text-muted-foreground truncate">{order.customerAddress}</p>
+                          )}
+                        </div>
+
+                        <div className="col-span-6 md:col-span-2">
+                          <span className="text-sm text-foreground">
+                            {order.orderType === 'delivery' ? '🚚 Domicilio' : '📍 Recoger'}
+                          </span>
+                        </div>
+
+                        <div className="col-span-6 md:col-span-2">
+                          <span className="text-sm font-semibold text-primary">{formatPrice(order.total)}</span>
+                          {order.discount > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Descuento: {formatPrice(order.discount)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="col-span-12 md:col-span-2 flex md:justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant={order.status === 'ready' ? 'default' : 'outline'}
+                            onClick={() => handleUpdateOrderStatus(order.id, 'ready')}
+                            className="gap-1"
+                            disabled={order.status === 'cancelled'}
+                          >
+                            <CheckCircle className="w-3 h-3" />
+                            Listo
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
+                            className="gap-1 text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            disabled={order.status === 'cancelled'}
+                          >
+                            <XCircle className="w-3 h-3" />
+                            Cancelar
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xl font-bold text-primary">{formatPrice(order.total)}</p>
-                    </div>
-                    
-                    {/* Datos del cliente */}
-                    <div className="bg-muted/50 rounded-lg p-4 mb-4">
-                      <p className="font-medium text-foreground">{order.customerName}</p>
-                      <p className="text-sm text-muted-foreground">{order.customerPhone}</p>
-                      {order.customerAddress && (
-                        <p className="text-sm text-muted-foreground">{order.customerAddress}</p>
-                      )}
-                      <p className="text-sm mt-2">
-                        <span className="font-medium">
-                          {order.orderType === 'delivery' ? '🚚 Domicilio' : '📍 Recoger en tienda'}
-                        </span>
-                      </p>
-                    </div>
-                    
-                    {/* Productos */}
-                    <div className="space-y-2 mb-4">
-                      {order.items.map((item) => (
-                        <div key={item.id} className="flex justify-between text-sm">
-                          <span className="text-foreground">{item.name} x{item.quantity}</span>
-                          <span className="text-muted-foreground">{formatPrice(item.price * item.quantity)}</span>
+
+                      <div className="mt-3 bg-muted/30 rounded-lg p-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Items</p>
+                        <div className="space-y-1">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="flex justify-between text-xs">
+                              <span className="text-foreground">
+                                {item.name} x{item.quantity}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {formatPrice(item.price * item.quantity)}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
-                    
-                    {/* Acciones */}
-                    <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
-                      <Button
-                        size="sm"
-                        variant={order.status === 'confirmed' ? 'default' : 'outline'}
-                        onClick={() => handleUpdateOrderStatus(order.id, 'confirmed')}
-                        className="gap-1"
-                      >
-                        <AlertCircle className="w-3 h-3" />
-                        Confirmar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={order.status === 'completed' ? 'default' : 'outline'}
-                        onClick={() => handleUpdateOrderStatus(order.id, 'completed')}
-                        className="gap-1"
-                      >
-                        <CheckCircle className="w-3 h-3" />
-                        Completado
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleUpdateOrderStatus(order.id, 'cancelled')}
-                        className="gap-1 text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                      >
-                        <XCircle className="w-3 h-3" />
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </TabsContent>
@@ -877,3 +968,4 @@ export default function AdminDashboardPage() {
     </div>
   )
 }
+
