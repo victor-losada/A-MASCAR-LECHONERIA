@@ -118,7 +118,7 @@ export function HeroSection() {
               {/* Main image container */}
               <div className="relative w-[280px] h-[280px] md:w-[380px] md:h-[380px] rounded-full overflow-hidden border-4 border-primary/30 shadow-2xl transform hover:scale-105 transition-transform duration-500">
                 <Image
-                  src="/images/lechona-hero.jpg"
+                  src="/images/lechona2.png"
                   alt="Lechona asada tradicional colombiana"
                   fill
                   className="object-cover"

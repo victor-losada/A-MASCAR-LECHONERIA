@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { Product, Offer, Order, CartItem } from './config'
+import bcrypt from 'bcryptjs'
 
 // ============ PRODUCTOS (desde Supabase) ============
 export async function getProducts(): Promise<Product[]> {
@@ -344,13 +345,14 @@ export type AdminSession = { id: string; username: string; loginAt: string }
 
 export async function createAdminUser(username: string, password: string): Promise<boolean> {
   const supabase = createClient()
+  // Hash real de la contraseña (bcrypt).
+  // Nota: antes guardábamos texto plano; ahora guardamos el hash en `password_hash`.
+  const passwordHash = await bcrypt.hash(password, 12)
   const { error } = await supabase
     .from('admin_users')
     .insert({
       username,
-      // Nota: por simplicidad usamos password en texto plano en `password_hash`
-      // Debes cambiarlo a un hash real (bcrypt/argon2) y ajustar la verificación.
-      password_hash: password,
+      password_hash: passwordHash,
     })
 
   if (error) {
@@ -367,13 +369,22 @@ export async function loginAdmin(username: string, password: string): Promise<bo
     .from('admin_users')
     .select('*')
     .eq('username', username)
-    .eq('password_hash', password)
     .single()
   
   if (error || !data) {
     return false
   }
   
+  const stored = data.password_hash
+  // Compat temporal: si el admin ya existía con texto plano, comparamos directo.
+  // Si tiene formato de bcrypt ($2a$/$2b$/$2y$), usamos compare().
+  const isBcryptHash = typeof stored === 'string' && stored.startsWith('$2')
+  const ok = isBcryptHash
+    ? await bcrypt.compare(password, stored)
+    : stored === password
+
+  if (!ok) return false
+
   // Guardar sesion en localStorage
   if (typeof window !== 'undefined') {
     localStorage.setItem('admin_session', JSON.stringify({
